@@ -1,24 +1,26 @@
 ﻿
 using Bulky.DataAccess.Data;
+using Bulky.DataAccess.Repository.IRepository;
 using Bulky.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace BulkyWeb.Controllers
+namespace BulkyWeb.Areas.Admin.Controllers
 {
+    [Area("Admin")]
     public class CategoryController : Controller
     {
         //ApplicationDbContext db = new ApplicationDbContext(); .Net core application
         // GET: CategoryController
-        private readonly ApplicationDbContext _db;
-        public CategoryController(ApplicationDbContext db)
+        private readonly IUnitOfWork _unitofwork;
+        public CategoryController(IUnitOfWork unitofwork)
         {
-            _db = db;   
+            _unitofwork = unitofwork;
         }
         public ActionResult Index()
         {
 
-           List<Category> objCategoryList = _db.Categories.ToList();
+            List<Category> objCategoryList = _unitofwork.Category.GetAll().ToList();
             return View(objCategoryList);
         }
 
@@ -41,16 +43,17 @@ namespace BulkyWeb.Controllers
         {
             try
             {
-                if(obj.Name == obj.DisplayOrder.ToString())
+                if (obj.Name == obj.DisplayOrder.ToString())
                 {
                     ModelState.AddModelError("Name", "The Display cannot exactly match the Name");
                 }
 
-                if(ModelState.IsValid) { 
-                _db.Categories.Add(obj);
-                _db.SaveChanges();
-                 TempData["success"] = "Category created successfully";
-                 return RedirectToAction(nameof(Index));
+                if (ModelState.IsValid)
+                {
+                    _unitofwork.Category.Add(obj);
+                    _unitofwork.Save();
+                    TempData["success"] = "Category created successfully";
+                    return RedirectToAction(nameof(Index));
                 }
                 return View();
 
@@ -64,12 +67,12 @@ namespace BulkyWeb.Controllers
         // GET: CategoryController/Edit/5
         public ActionResult Edit(int? id)
         {
-            if(id ==0 || id == null)
+            if (id == 0 || id == null)
             {
                 return NotFound();
             }
-            Category? categoryFromDb = _db.Categories.FirstOrDefault(c => c.Id == id);
-            if(categoryFromDb == null)
+            Category? categoryFromDb = _unitofwork.Category.Get(u => u.Id == id);
+            if (categoryFromDb == null)
             {
                 return NotFound();
             }
@@ -85,8 +88,8 @@ namespace BulkyWeb.Controllers
             {
                 if (ModelState.IsValid)
                 {
-                    _db.Categories.Update(obj);
-                    _db.SaveChanges();
+                    _unitofwork.Category.Update(obj);
+                    _unitofwork.Save();
                     TempData["success"] = "Category updated successfully";
                     return RedirectToAction(nameof(Index));
                 }
@@ -105,7 +108,7 @@ namespace BulkyWeb.Controllers
             {
                 return NotFound();
             }
-            Category? categoryFromDb = _db.Categories.FirstOrDefault(c => c.Id == id);
+            Category? categoryFromDb = _unitofwork.Category.Get(u => u.Id == id);
             if (categoryFromDb == null)
             {
                 return NotFound();
@@ -120,13 +123,13 @@ namespace BulkyWeb.Controllers
         {
             try
             {
-             Category? obj = _db.Categories.Find(id);
+                Category? obj = _unitofwork.Category.Get(u => u.Id == id);
                 if (obj == null)
                 {
                     return NotFound();
                 }
-                _db.Categories.Remove(obj);
-                _db.SaveChanges();
+                _unitofwork.Category.Remove(obj);
+                _unitofwork.Save();
                 TempData["success"] = "Category deleted successfully";
                 return RedirectToAction(nameof(Index));
             }
