@@ -4,6 +4,7 @@ using Bulky.DataAccess.Repository;
 using Bulky.DataAccess.Repository.IRepository;
 using Bulky.Models;
 using Bulky.Models.ViewModels;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -16,14 +17,16 @@ namespace BulkyWeb.Areas.Admin.Controllers
         //ApplicationDbContext db = new ApplicationDbContext(); .Net core application
         // GET: ProductController
         private readonly IUnitOfWork _unitofwork;
-        public ProductController(IUnitOfWork unitofwork)
+        private readonly IWebHostEnvironment _webHostEnvironment;
+        public ProductController(IUnitOfWork unitofwork, IWebHostEnvironment webHostEnvironment)
         {
             _unitofwork = unitofwork;
+            _webHostEnvironment = webHostEnvironment;
         }
         public ActionResult Index()
         {
 
-            List<Product> objProductList = _unitofwork.Product.GetAll().ToList();
+            List<Product> objProductList = _unitofwork.Product.GetAll(includeProperties:"Category").ToList();
 
             return View(objProductList);
         }
@@ -35,7 +38,7 @@ namespace BulkyWeb.Areas.Admin.Controllers
         }
 
         // GET: ProductController/Create
-        public ActionResult Create()
+        public ActionResult Upsert(int? id)
         {
             //ViewBag.CategoryList = CategoryList;
             //ViewData["CategoryList"] = CategoryList;
@@ -49,20 +52,64 @@ namespace BulkyWeb.Areas.Admin.Controllers
              }),
                 Product = new Product()
             };
-            return View(productVM);
+            if(id==null || id == 0)
+            {
+                //update 
+                return View(productVM);
+            }
+            else
+            {
+                //update
+                productVM.Product = _unitofwork.Product.Get(u => u.Id == id);
+                return View(productVM);
+            }
+            
         }
 
         // POST: ProductController/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Create(ProductVM productVM)
+        public IActionResult Upsert(ProductVM productVM, IFormFile? file)
         {
             try
             {
 
                 if (ModelState.IsValid)
                 {
-                    _unitofwork.Product.Add(productVM.Product);
+                    string wwwRootPath = _webHostEnvironment.WebRootPath;
+                    if (file != null)
+                    {
+                        string fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+                        string productPath = Path.Combine(wwwRootPath, @"images\product");
+
+                        if (!string.IsNullOrEmpty(productVM.Product.ImageUrl))
+                        {
+                            //delete the old image
+                            var oldImagePath =
+                                Path.Combine(wwwRootPath, productVM.Product.ImageUrl.TrimStart('\\'));
+
+                            if (System.IO.File.Exists(oldImagePath))
+                            {
+                                System.IO.File.Delete(oldImagePath);
+                            }
+                        }
+
+                        using (var fileStream = new FileStream(Path.Combine(productPath, fileName), FileMode.Create))
+                        {
+                            file.CopyTo(fileStream);
+                        }
+
+                        productVM.Product.ImageUrl = @"\images\product\" + fileName;
+                    }
+
+                    if (productVM.Product.Id == 0)
+                    {
+                        _unitofwork.Product.Add(productVM.Product);
+                    }
+                    else
+                    {
+                        _unitofwork.Product.Update(productVM.Product);
+                    }
                     _unitofwork.Save();
                     TempData["success"] = "Product created successfully";
                     return RedirectToAction(nameof(Index));
@@ -85,80 +132,77 @@ namespace BulkyWeb.Areas.Admin.Controllers
                 return View();
             }
         }
+  
+        //// GET: CategoryController/Delete/5
+        //public ActionResult Delete(int? id)
+        //{
+        //    if (id == 0 || id == null)
+        //    {
+        //        return NotFound();
+        //    }
+        //    Product? productFromDb = _unitofwork.Product.Get(u => u.Id == id);
+        //    if (productFromDb == null)
+        //    {
+        //        return NotFound();
+        //    }
+        //    return View(productFromDb);
+        //}
 
-        // GET: CategoryController/Edit/5
-        public ActionResult Edit(int? id)
+        //// POST: CategoryController/Delete/5
+        //[HttpPost]
+        //[ValidateAntiForgeryToken]
+        //public ActionResult Delete(int id)
+        //{
+        //    try
+        //    {
+        //        Product? obj = _unitofwork.Product.Get(u => u.Id == id);
+        //        if (obj == null)
+        //        {
+        //            return NotFound();
+        //        }
+        //        _unitofwork.Product.Remove(obj);
+        //        _unitofwork.Save();
+        //        TempData["success"] = "Product deleted successfully";
+        //        return RedirectToAction(nameof(Index));
+        //    }
+        //    catch
+        //    {
+        //        return View();
+        //    }
+        //}
+        #region API CALL
+        [HttpGet]
+        public IActionResult GetAll()
         {
-            if (id == 0 || id == null)
-            {
-                return NotFound();
-            }
-            Product? productFromDb = _unitofwork.Product.Get(u => u.Id == id);
-            if (productFromDb == null)
-            {
-                return NotFound();
-            }
-            return View(productFromDb);
+            List<Product> objProductList = _unitofwork.Product.GetAll(includeProperties: "Category").ToList();
+            return Json(new { data = objProductList });
+
         }
 
-        // POST: CategoryController/Edit/5
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public ActionResult Edit(int id, Product obj)
+        
+        public IActionResult Delete(int? id)
         {
-            try
+            var productToBeDeleted = _unitofwork.Product.Get(u => u.Id == id);
+            if (productToBeDeleted == null)
             {
-                if (ModelState.IsValid)
-                {
-                    _unitofwork.Product.Update(obj);
-                    _unitofwork.Save();
-                    TempData["success"] = "Product updated successfully";
-                    return RedirectToAction(nameof(Index));
-                }
-                return View();
+               
+                return Json(new { success = false, message = "Error while deleting" });
             }
-            catch
+            var oldImagePath =
+                           Path.Combine(_webHostEnvironment.WebRootPath,
+                           productToBeDeleted.ImageUrl.TrimStart('\\'));
+
+            if (System.IO.File.Exists(oldImagePath))
             {
-                return View();
+                System.IO.File.Exists(oldImagePath);
             }
+            _unitofwork.Product.Remove(productToBeDeleted);
+            _unitofwork.Save();
+
+            return Json(new { success = true, message = "Delete Successful" });
+
         }
 
-        // GET: CategoryController/Delete/5
-        public ActionResult Delete(int? id)
-        {
-            if (id == 0 || id == null)
-            {
-                return NotFound();
-            }
-            Product? productFromDb = _unitofwork.Product.Get(u => u.Id == id);
-            if (productFromDb == null)
-            {
-                return NotFound();
-            }
-            return View(productFromDb);
-        }
-
-        // POST: CategoryController/Delete/5
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public ActionResult Delete(int id)
-        {
-            try
-            {
-                Product? obj = _unitofwork.Product.Get(u => u.Id == id);
-                if (obj == null)
-                {
-                    return NotFound();
-                }
-                _unitofwork.Product.Remove(obj);
-                _unitofwork.Save();
-                TempData["success"] = "Product deleted successfully";
-                return RedirectToAction(nameof(Index));
-            }
-            catch
-            {
-                return View();
-            }
-        }
+        #endregion
     }
 }
