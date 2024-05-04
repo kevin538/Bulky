@@ -2,12 +2,15 @@
 using Bulky.DataAccess.Data;
 using Bulky.DataAccess.Repository.IRepository;
 using Bulky.Models;
+using Bulky.Utility;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BulkyWeb.Areas.Admin.Controllers
 {
     [Area("Admin")]
+    [Authorize(Roles = SD.Role_Admin)]
     public class CategoryController : Controller
     {
         //ApplicationDbContext db = new ApplicationDbContext(); .Net core application
@@ -64,7 +67,7 @@ namespace BulkyWeb.Areas.Admin.Controllers
             }
         }
 
-        // GET: CategoryController/Edit/5
+        // GET: CategoryController/Edit/5   
         public ActionResult Edit(int? id)
         {
             if (id == 0 || id == null)
